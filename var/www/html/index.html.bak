@@ -1,0 +1,194 @@
+<html>
+
+<head>
+    <title>Apk Generator</title>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-1q8mTJOASx8j1Au+a5WDVnPi2lkFfwwEAa8hDDdjZlpLegxhjVME1fgjWPGmkzs7" crossorigin="anonymous">
+    <link href='https://fonts.googleapis.com/css?family=Roboto:400,100' rel='stylesheet' type='text/css'>
+    <link href="css/main.css" rel="stylesheet">
+</head>
+
+<body>
+    <div class="container">
+        <br>
+        <br>
+        <form name="htmlform" id="form" enctype="multipart/form-data" class="col-md-offset-4 col-xs-offset-2 col-xs-8 col-md-4 form-group generator_form">
+            <label for="name">Email</label>
+            <input type="email" class="form-control" id="Email" name="Email">
+            <br>
+            <label> Choose your data source </label>
+            <ul style="list-style-type:none">
+                <li>
+                    <input type="radio" name="datasource" value="jsonupload"> Upload your own JSON files </input>
+                </li>
+                <li>
+                    <input type="radio" name="datasource" value="eventapi"> API endpoint of event on OpenEvent </input>
+                </li>
+            </ul>
+            <br>
+            <section id="eventapi-input" style="display:none;">
+                <label for="apiendpoint">Link to Open Event API endpoint</label>
+                <input type="url" class="form-control" id="Api_Link" name="Api_Link">
+            </section>
+            <br>
+            <section id="jsonupload-input" style="display:none;">
+                <label for="apiendpoint">Zip file containing resources for the event</label>
+                <input accept=".zip" type="file" name="uploadZip" id="uploadZip" class="form-control" />
+                <br>
+            </section>
+            <br>
+            <input type="hidden" name="assetmode" value="download">
+            <center>
+                <br>
+                <div id="status"></div>
+                <br>
+                <section>
+                    <br>
+                    <div class="progress" style="display:none;">
+                        <div class="progress-bar" role="progressbar" id="upload-progress" style="width:0%; height: 20px;">
+                            <span id="upload-progress-val">0%</span>
+                        </div>
+                    </div>
+                    <br>
+                </section>
+                <h3 id="status"></h3>
+                <tr>
+                    <td colspan="5" style="text-align:center">
+                        <button id="submit" class="download btn btn-default" type="submit">Generate and Download app</button>
+                    </td>
+                </tr>
+                </table>
+        </form>
+        <script src="https://www.gstatic.com/firebasejs/live/3.0/firebase.js"></script>
+        <script src="https://code.jquery.com/jquery-3.1.0.min.js"></script>
+        <script src="https://code.jquery.com/ui/1.12.0/jquery-ui.js"></script>
+        <script>
+            $('input:radio[name="datasource"]').change(
+                function() {
+                    if ($(this).is(':checked')) {
+
+                        if ($(this).val() === 'mockjson') {
+                            $('#jsonupload-input').hide(100);
+                            $('#eventapi-input').hide(100);
+                        }
+
+                        if ($(this).val() === 'jsonupload') {
+                            $('#jsonupload-input').show(100);
+                            $('#eventapi-input').hide(100);
+                        }
+
+                        if ($(this).val() === 'eventapi') {
+                            $('#eventapi-input').show(100);
+                            $('#jsonupload-input').hide(100);
+                        }
+                    }
+                });
+	    var $ = jQuery;
+	    var data = "false";
+            var ajax = new XMLHttpRequest();
+            var timestamp = Number(new Date());
+            var form = document.querySelector("form");
+            var config = {
+            apiKey: "AIzaSyDTo4TPzUkvYYN5dwvNnI4jVmB_eTc0Lpo",
+            authDomain: "app-generator.firebaseapp.com",
+            databaseURL: "https://app-generator.firebaseio.com",
+            storageBucket: "app-generator.appspot.com",
+            };
+            firebase.initializeApp(config);
+            var file = document.getElementById('uploadZip');
+            file.onchange = function(e) {
+                var ext = this.value.match(/\.([^\.]+)$/)[1];
+                switch (ext) {
+                    case 'zip':
+                        ajax.abort();
+                        $('.progress').show();
+                        $('#upload-progress').show();
+                        data = "true";
+			$('#submit').hide();
+                        uploadFile();
+                        break;
+                    default:
+                        alert('Only zip files are allowed');
+                        this.value = '';
+                }
+            };
+            var database = firebase.database();
+            form.addEventListener("submit", function(event) {
+                event.preventDefault();
+                $('.progress').css('display', 'block');
+                $('#generator-progress').css('display', 'block')
+                $('#upload-progress').css('display', 'block')
+                var ary = $(form).serializeArray();
+                var obj = {};
+                for (var a = 0; a < ary.length; a++) obj[ary[a].name] = ary[a].value;
+                console.log("JSON", obj);
+		if(obj.Api_Link != ""){data = "true"}
+
+                if (obj.Email == "" || data == "false") {
+                    alert("It seems like you forgot to fill up your email or data source");
+                    setTimeout("location.reload(true);", 1);
+                } else {
+                    updatePercentUpload(20)
+                    var file_data = $('#uploadZip').prop('files')[0];
+                    var form_data = new FormData();
+                    form_data.append('file', file_data);
+                    firebase.database().ref('users/' + timestamp).set(obj);
+                    database.ref('users/' + timestamp).once('value').then(function(snapshot) {
+                        updatePercentUpload(10);
+                        console.log("Received value", snapshot.val());
+                        document.getElementById("status").innerHTML = "Building the app. This might take a while...";
+                        ajaxCall1();
+
+                        function ajaxCall1() {
+                            updatePercentUpload(35);
+                            $.ajax({
+                                type: "POST",
+                                url: "/runPy.php",
+                                data: {
+                                    timestamp: timestamp
+                                },
+                                success: function(response) {
+                                    console.log("Success", response);
+                                    updatePercentUpload(100);
+                                    window.location = response;
+                                    document.getElementById("status").innerHTML = "App build completed!";
+                                }
+                            });
+                        }
+                    });
+                }
+            }); //after this
+            function updatePercentUpload(perc) {
+                $('#upload-progress').css('width', perc + '%');
+                $('#upload-progress').html(parseInt(perc) + '%');
+            }
+
+            function uploadFile() {
+                var file_data = $('#uploadZip').prop('files')[0];
+                var form_data = new FormData();
+                form_data.append('file', file_data);
+                form_data.append('timestamp', timestamp);
+                ajax.upload.addEventListener("progress", progressHandler, false);
+                ajax.addEventListener("load", completeHandler, false);
+                ajax.open("POST", "upload.php");
+                ajax.send(form_data);
+
+            }
+
+            function progressHandler(event) {
+                var percent = (event.loaded / event.total) * 100;
+                updatePercentUpload(Math.round(percent))
+                document.getElementById("status").innerHTML = Math.round(percent) + "% uploaded... please wait";
+            }
+
+            function completeHandler(event) {
+                document.getElementById("status").innerHTML = "Upload Complete, click on the button below to build your app";
+                $('#submit').show();
+            }
+        </script>
+    </div>
+</body>
+
+</html>
